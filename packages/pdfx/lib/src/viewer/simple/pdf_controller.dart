@@ -9,7 +9,9 @@ class PdfController with BasePdfController {
   }) : assert(viewportFraction > 0.0);
 
   @override
-  final ValueNotifier<PdfLoadingState> loadingState = ValueNotifier(PdfLoadingState.loading);
+  final ValueNotifier<PdfLoadingState> loadingState = ValueNotifier(
+    PdfLoadingState.loading,
+  );
 
   /// Document future for showing in [PdfView]
   Future<PdfDocument> document;
@@ -43,8 +45,16 @@ class PdfController with BasePdfController {
   ///
   /// Jumps the page position from its current value to the given value,
   /// without animation, and without checking if the new value is in range.
+  int? get _pageControllerIndex {
+    final controller = _pageController;
+    if (controller == null || !controller.hasClients) {
+      return null;
+    }
+    return controller.page?.round();
+  }
+
   @override
-  void jumpToPage(int page) => _pageController!.jumpToPage(page - 1);
+  void jumpToPage(int page) => _pageController?.jumpToPage(page - 1);
 
   /// Animates the controlled [PdfView] from the current page to the given page.
   ///
@@ -58,12 +68,13 @@ class PdfController with BasePdfController {
     double? padding,
     Duration duration = const Duration(milliseconds: 500),
     Curve curve = Curves.easeInOut,
-  }) =>
-      _pageController!.animateToPage(
-        page - 1,
-        duration: duration,
-        curve: curve,
-      );
+  }) {
+    final controller = _pageController;
+    if (controller == null) {
+      return Future.value();
+    }
+    return controller.animateToPage(page - 1, duration: duration, curve: curve);
+  }
 
   /// Animates the controlled [PdfView] to the next page.
   ///
@@ -71,11 +82,18 @@ class PdfController with BasePdfController {
   /// The returned [Future] resolves when the animation completes.
   ///
   /// The `duration` and `curve` arguments must not be null.
-  Future<void> nextPage({
-    required Duration duration,
-    required Curve curve,
-  }) =>
-      _pageController!.animateToPage(_pageController!.page!.round() + 1, duration: duration, curve: curve);
+  Future<void> nextPage({required Duration duration, required Curve curve}) {
+    final controller = _pageController;
+    final currentIndex = _pageControllerIndex;
+    if (controller == null || currentIndex == null) {
+      return Future.value();
+    }
+    return controller.animateToPage(
+      currentIndex + 1,
+      duration: duration,
+      curve: curve,
+    );
+  }
 
   /// Animates the controlled [PdfView] to the previous page.
   ///
@@ -86,8 +104,18 @@ class PdfController with BasePdfController {
   Future<void> previousPage({
     required Duration duration,
     required Curve curve,
-  }) =>
-      _pageController!.animateToPage(_pageController!.page!.round() - 1, duration: duration, curve: curve);
+  }) {
+    final controller = _pageController;
+    final currentIndex = _pageControllerIndex;
+    if (controller == null || currentIndex == null) {
+      return Future.value();
+    }
+    return controller.animateToPage(
+      currentIndex - 1,
+      duration: duration,
+      curve: curve,
+    );
+  }
 
   /// Load document
   Future<void> loadDocument(
@@ -115,7 +143,9 @@ class PdfController with BasePdfController {
       _document = await documentFuture;
       loadingState.value = PdfLoadingState.success;
     } catch (error) {
-      _pdfViewState!._loadingError = error is Exception ? error : Exception('Unknown error');
+      _pdfViewState!._loadingError = error is Exception
+          ? error
+          : Exception('Unknown error');
       loadingState.value = PdfLoadingState.error;
     }
   }
@@ -148,6 +178,7 @@ class PdfController with BasePdfController {
 
   @override
   void dispose() {
+    _detach();
     _pageController?.dispose();
     _document?.close();
   }
